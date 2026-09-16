@@ -168,6 +168,35 @@
             </plugin>
 
             <!--
+                Explicitly registers Lombok as an annotation processor.
+                WHY THIS IS NEEDED: when annotationProcessorPaths is left unset,
+                maven-compiler-plugin falls back to implicit discovery of
+                processors from the full compile classpath. In practice (and
+                especially on JDK 17 + maven-compiler-plugin 3.11.x on some
+                Windows/IntelliJ-embedded-Maven setups) that implicit discovery
+                is unreliable and can SILENTLY skip Lombok for some compilation
+                units while processing others in the same module - producing
+                exactly the symptom of "cannot find symbol: method builder()/
+                getX()/setX()" and "variable not initialized in the default
+                constructor" on only SOME Lombok-annotated classes. Declaring
+                the path explicitly forces Lombok to run deterministically for
+                every source file, every time.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!--
                 Generates strongly-typed Java classes (SpecificRecord) from the
                 .avsc files in src/main/avro at build time. This is what gives
                 us PaymentInitiatedEvent.newBuilder() etc. Run `mvn generate-sources`
