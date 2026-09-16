@@ -1,0 +1,21 @@
+{
+  "namespace": "com.publicissapient.paymentfraud.avro",
+  "type": "record",
+  "name": "HighRiskAlertEvent",
+  "doc": "Produced by the Kafka Streams fraud-detection topology when a user's total spend exceeds the risk threshold within a 5-minute tumbling window.",
+  "fields": [
+    { "name": "userId",              "type": "string" },
+    { "name": "totalAmount",         "type": "bytes", "logicalType": "decimal", "precision": 18, "scale": 2 },
+    { "name": "windowStart",         "type": "long", "logicalType": "timestamp-millis" },
+    { "name": "windowEnd",           "type": "long", "logicalType": "timestamp-millis" },
+    { "name": "alertGeneratedTimestamp", "type": "long", "logicalType": "timestamp-millis" },
+    { "name": "triggeringPaymentIds", "type": { "type": "array", "items": "string" },
+      "doc": "All paymentIds that contributed to this window's aggregate, for downstream investigation" },
+    { "name": "riskLevel", "type": {
+        "type": "enum", "name": "RiskLevel",
+        "symbols": ["MEDIUM", "HIGH", "CRITICAL"]
+      },
+      "default": "HIGH"
+    }
+  ]
+}

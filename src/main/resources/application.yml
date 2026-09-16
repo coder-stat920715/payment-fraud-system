@@ -1,0 +1,123 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: payment-fraud-system
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/payment_fraud_db
+    username: payment_app
+    password: payment_app_pwd
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # schema is owned by Flyway migrations, not Hibernate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false     # never leave the persistence context open into the view layer
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+    # ---------------------------------------------------------------------
+    # PRODUCER
+    # ---------------------------------------------------------------------
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all                       # wait for ALL in-sync replicas -> no acknowledged-but-lost writes
+      properties:
+        enable.idempotence: true      # broker dedupes retried sends by (PID, sequence number) -> exactly-once per partition
+        max.in.flight.requests.per.connection: 5   # safe up to 5 with idempotence on (broker still preserves ordering)
+        retries: 2147483647           # Integer.MAX_VALUE - retry indefinitely; idempotence prevents duplicate side effects
+        delivery.timeout.ms: 120000   # upper bound on retries+backoff before giving up and failing the send
+        request.timeout.ms: 30000
+        linger.ms: 5                  # tiny batching window - throughput win with near-zero added latency
+        compression.type: snappy
+        schema.registry.url: http://localhost:8081
+        auto.register.schemas: false  # PRODUCTION: schemas are registered via CI/CD, not accidentally by a running app
+        partitioner.class: com.publicissapient.paymentfraud.producer.HighValueTransactionPartitioner
+
+    # ---------------------------------------------------------------------
+    # CONSUMER
+    # ---------------------------------------------------------------------
+    consumer:
+      group-id: payment-processing-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false        # we commit manually via Acknowledgment.acknowledge()
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: io.confluent.kafka.serializers.KafkaAvroDeserializer
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        schema.registry.url: http://localhost:8081
+        specific.avro.reader: true
+        max.poll.records: 500
+        max.poll.interval.ms: 300000
+        session.timeout.ms: 45000
+        heartbeat.interval.ms: 15000
+
+    # ---------------------------------------------------------------------
+    # KAFKA STREAMS
+    # ---------------------------------------------------------------------
+    streams:
+      application-id: fraud-detection-streams-app
+      properties:
+        schema.registry.url: http://localhost:8081
+        default.key.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+        default.value.serde: io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde
+        num.stream.threads: 2
+        commit.interval.ms: 1000
+        cache.max.bytes.buffering: 10485760      # 10MB record cache -> fewer downstream updates, smoother load
+        processing.guarantee: exactly_once_v2     # transactional writes across the topology's internal topics + output
+        state.dir: /tmp/kafka-streams/payment-fraud
+
+# -----------------------------------------------------------------------
+# Application-specific topic + topology configuration
+# -----------------------------------------------------------------------
+app:
+  kafka:
+    topics:
+      payment-initiated: payment.initiated.events
+      payment-processed: payment.processed.events
+      user-account-balances: user-account-balances
+      high-risk-alerts: fraud.high-risk.alerts
+      payment-initiated-retry: payment.initiated.events-retry
+      payment-initiated-dlt: payment.initiated.events.DLT
+    partitions:
+      default: 6
+    high-value-threshold-usd: 10000
+    fraud:
+      window-size-minutes: 5
+      window-grace-seconds: 30
+      risk-threshold-usd: 15000
+    transactional-id-prefix: payment-tx-
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    org.apache.kafka: WARN
+    org.springframework.kafka: INFO
+    com.publicissapient.paymentfraud: DEBUG

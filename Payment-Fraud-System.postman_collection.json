@@ -1,0 +1,351 @@
+{
+  "info": {
+    "name": "Payment & Fraud Processing System",
+    "description": "REST + Schema Registry API collection for the Real-Time Payment & Fraud Processing System (Spring Boot 3 / Kafka / Kafka Streams / Avro). Use alongside TESTING_GUIDE.md for the Kafka-native tests (producer, consumer, streams, DLT, compaction) that Postman can't exercise directly over HTTP.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "b6f2a1a0-1e6a-4a7a-9d2a-payment-fraud-system"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8090", "type": "string" },
+    { "key": "schema_registry_url", "value": "http://localhost:8081", "type": "string" },
+    { "key": "kafka_ui_url", "value": "http://localhost:8080", "type": "string" },
+    { "key": "payment_initiated_subject", "value": "payment.initiated.events-value", "type": "string" },
+    { "key": "payment_processed_subject", "value": "payment.processed.events-value", "type": "string" },
+    { "key": "last_payment_id", "value": "", "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "1. Payments API",
+      "item": [
+        {
+          "name": "Initiate Payment (normal, < $10k)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202 Accepted', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "pm.test('Response has paymentId', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.paymentId).to.not.be.undefined;",
+                  "    pm.collectionVariables.set('last_payment_id', json.paymentId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"merchantId\": \"merchant-7\",\n  \"amount\": 249.99,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "v1", "payments" ]
+            },
+            "description": "Happy-path payment. Amount is below the $10,000 high-value threshold, so the custom Partitioner should route this using default keyed (murmur2) partitioning - NOT partition 0. Follow up in Kafka UI to confirm the partition assignment (see TESTING_GUIDE.md Step 4)."
+          }
+        },
+        {
+          "name": "Initiate HIGH-VALUE Payment (> $10k, tests custom Partitioner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202 Accepted', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "pm.test('Response has paymentId', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.paymentId).to.not.be.undefined;",
+                  "    pm.collectionVariables.set('last_payment_id', json.paymentId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-999\",\n  \"merchantId\": \"merchant-1\",\n  \"amount\": 25000.00,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "v1", "payments" ]
+            },
+            "description": "Amount ($25,000) exceeds the $10,000 HighValueTransactionPartitioner threshold. Confirm in Kafka UI that this record lands on partition 0 of payment.initiated.events (see TESTING_GUIDE.md Step 4)."
+          }
+        },
+        {
+          "name": "Trigger Fraud Alert (5x rapid payments, same user, > $15k total)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Run this request 5 times in a row (Collection Runner, 5 iterations, 0ms delay)",
+                  "// against the SAME userId, each ~$3,200, to accumulate > $15,000 inside one",
+                  "// 5-minute tumbling window and trigger a HighRiskAlertEvent."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"fraud-test-user\",\n  \"merchantId\": \"merchant-3\",\n  \"amount\": 3200.00,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "v1", "payments" ]
+            },
+            "description": "Use Postman's Collection Runner to POST this 5 times back-to-back (5 x $3,200 = $16,000 > $15,000 threshold) within the same 5-minute window for userId=fraud-test-user. Then watch fraud.high-risk.alerts in Kafka UI for the emitted HighRiskAlertEvent (see TESTING_GUIDE.md Step 9)."
+          }
+        },
+        {
+          "name": "Initiate Payment - Validation Error (negative amount)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"merchantId\": \"merchant-7\",\n  \"amount\": -50.00,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "v1", "payments" ]
+            },
+            "description": "amount must be @Positive - confirms bean validation is wired on the DTO."
+          }
+        },
+        {
+          "name": "Initiate Payment - Validation Error (missing userId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantId\": \"merchant-7\",\n  \"amount\": 100.00,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments",
+              "host": [ "{{base_url}}" ],
+              "path": [ "api", "v1", "payments" ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "2. Actuator (Health & Metrics)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/actuator/health",
+              "host": [ "{{base_url}}" ],
+              "path": [ "actuator", "health" ]
+            },
+            "description": "Confirms DB, Redis, and Kafka connectivity via Spring Boot's auto-configured health indicators."
+          }
+        },
+        {
+          "name": "Metrics - list available",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/actuator/metrics",
+              "host": [ "{{base_url}}" ],
+              "path": [ "actuator", "metrics" ]
+            }
+          }
+        },
+        {
+          "name": "Metrics - Kafka consumer lag / records-consumed",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/actuator/metrics/kafka.consumer.records.consumed.total",
+              "host": [ "{{base_url}}" ],
+              "path": [ "actuator", "metrics", "kafka.consumer.records.consumed.total" ]
+            },
+            "description": "Micrometer's Kafka client metrics binder - useful during the rebalance/DLT tests to see consumption resume after a restart."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "3. Schema Registry (Compatibility & Evolution)",
+      "item": [
+        {
+          "name": "List all subjects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{schema_registry_url}}/subjects",
+              "host": [ "{{schema_registry_url}}" ],
+              "path": [ "subjects" ]
+            },
+            "description": "Should list payment.initiated.events-value, payment.processed.events-value, fraud.high-risk.alerts-value once the app has produced at least one message to each topic."
+          }
+        },
+        {
+          "name": "Get latest schema - PaymentInitiatedEvent",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{schema_registry_url}}/subjects/{{payment_initiated_subject}}/versions/latest",
+              "host": [ "{{schema_registry_url}}" ],
+              "path": [ "subjects", "{{payment_initiated_subject}}", "versions", "latest" ]
+            }
+          }
+        },
+        {
+          "name": "Get schema version history",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{schema_registry_url}}/subjects/{{payment_initiated_subject}}/versions",
+              "host": [ "{{schema_registry_url}}" ],
+              "path": [ "subjects", "{{payment_initiated_subject}}", "versions" ]
+            }
+          }
+        },
+        {
+          "name": "Get global compatibility level",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{schema_registry_url}}/config",
+              "host": [ "{{schema_registry_url}}" ],
+              "path": [ "config" ]
+            }
+          }
+        },
+        {
+          "name": "Check compatibility - SAFE additive change (should PASS)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/vnd.schemaregistry.v1+json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"schema\": \"{\\\"namespace\\\":\\\"com.publicissapient.paymentfraud.avro\\\",\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"PaymentInitiatedEvent\\\",\\\"fields\\\":[{\\\"name\\\":\\\"paymentId\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"userId\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"merchantId\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"amount\\\",\\\"type\\\":\\\"bytes\\\",\\\"logicalType\\\":\\\"decimal\\\",\\\"precision\\\":18,\\\"scale\\\":2},{\\\"name\\\":\\\"currency\\\",\\\"type\\\":\\\"string\\\",\\\"default\\\":\\\"USD\\\"},{\\\"name\\\":\\\"paymentMethod\\\",\\\"type\\\":{\\\"type\\\":\\\"enum\\\",\\\"name\\\":\\\"PaymentMethod\\\",\\\"symbols\\\":[\\\"CARD\\\",\\\"ACH\\\",\\\"WIRE\\\",\\\"WALLET\\\",\\\"UPI\\\"]}},{\\\"name\\\":\\\"initiatedTimestamp\\\",\\\"type\\\":\\\"long\\\",\\\"logicalType\\\":\\\"timestamp-millis\\\"},{\\\"name\\\":\\\"metadata\\\",\\\"type\\\":[\\\"null\\\",{\\\"type\\\":\\\"map\\\",\\\"values\\\":\\\"string\\\"}],\\\"default\\\":null},{\\\"name\\\":\\\"deviceFingerprint\\\",\\\"type\\\":[\\\"null\\\",\\\"string\\\"],\\\"default\\\":null}]}\"\n}"
+            },
+            "url": {
+              "raw": "{{schema_registry_url}}/compatibility/subjects/{{payment_initiated_subject}}/versions/latest",
+              "host": [ "{{schema_registry_url}}" ],
+              "path": [ "compatibility", "subjects", "{{payment_initiated_subject}}", "versions", "latest" ]
+            },
+            "description": "Adds a new nullable `deviceFingerprint` field with a default of null - a BACKWARD-compatible additive change. Expect {\"is_compatible\": true}."
+          }
+        },
+        {
+          "name": "Check compatibility - BREAKING change (should FAIL)",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/vnd.schemaregistry.v1+json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"schema\": \"{\\\"namespace\\\":\\\"com.publicissapient.paymentfraud.avro\\\",\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"PaymentInitiatedEvent\\\",\\\"fields\\\":[{\\\"name\\\":\\\"paymentId\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"userId\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"merchantId\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"amount\\\",\\\"type\\\":\\\"string\\\"},{\\\"name\\\":\\\"currency\\\",\\\"type\\\":\\\"string\\\",\\\"default\\\":\\\"USD\\\"},{\\\"name\\\":\\\"paymentMethod\\\",\\\"type\\\":{\\\"type\\\":\\\"enum\\\",\\\"name\\\":\\\"PaymentMethod\\\",\\\"symbols\\\":[\\\"CARD\\\",\\\"ACH\\\",\\\"WIRE\\\",\\\"WALLET\\\",\\\"UPI\\\"]}},{\\\"name\\\":\\\"initiatedTimestamp\\\",\\\"type\\\":\\\"long\\\",\\\"logicalType\\\":\\\"timestamp-millis\\\"}]}\"\n}"
+            },
+            "url": {
+              "raw": "{{schema_registry_url}}/compatibility/subjects/{{payment_initiated_subject}}/versions/latest",
+              "host": [ "{{schema_registry_url}}" ],
+              "path": [ "compatibility", "subjects", "{{payment_initiated_subject}}", "versions", "latest" ]
+            },
+            "description": "Changes `amount` from `bytes` (decimal) to `string`, and DROPS the `metadata` field entirely (which has no default-safe removal path across all readers). Expect {\"is_compatible\": false} - proves Schema Registry blocks the breaking change before it can ever reach a topic."
+          }
+        },
+        {
+          "name": "Get latest schema - HighRiskAlertEvent",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{schema_registry_url}}/subjects/fraud.high-risk.alerts-value/versions/latest",
+              "host": [ "{{schema_registry_url}}" ],
+              "path": [ "subjects", "fraud.high-risk.alerts-value", "versions", "latest" ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "4. Kafka UI (optional REST helpers)",
+      "item": [
+        {
+          "name": "List topics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{kafka_ui_url}}/api/clusters/local/topics",
+              "host": [ "{{kafka_ui_url}}" ],
+              "path": [ "api", "clusters", "local", "topics" ]
+            },
+            "description": "provectuslabs/kafka-ui exposes a REST API mirroring its UI. Path/shape can vary slightly by image version - if this 404s, just use the Kafka UI web console at {{kafka_ui_url}} directly (see TESTING_GUIDE.md)."
+          }
+        },
+        {
+          "name": "List consumer groups",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{kafka_ui_url}}/api/clusters/local/consumer-groups",
+              "host": [ "{{kafka_ui_url}}" ],
+              "path": [ "api", "clusters", "local", "consumer-groups" ]
+            },
+            "description": "Inspect payment-processing-group and payment-dlt-monitoring-group lag/assignment here during the rebalance test."
+          }
+        }
+      ]
+    }
+  ]
+}

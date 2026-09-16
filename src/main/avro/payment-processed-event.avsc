@@ -1,0 +1,22 @@
+{
+  "namespace": "com.publicissapient.paymentfraud.avro",
+  "type": "record",
+  "name": "PaymentProcessedEvent",
+  "doc": "Emitted after the payment has gone through authorization/fraud-scoring. Consumed by ledger, notification, and analytics services.",
+  "fields": [
+    { "name": "paymentId",  "type": "string" },
+    { "name": "userId",     "type": "string" },
+    { "name": "amount",     "type": "bytes", "logicalType": "decimal", "precision": 18, "scale": 2 },
+    { "name": "currency",   "type": "string", "default": "USD" },
+    { "name": "status", "type": {
+        "type": "enum", "name": "PaymentStatus",
+        "symbols": ["APPROVED", "DECLINED", "FLAGGED_FOR_REVIEW", "FAILED"]
+      }
+    },
+    { "name": "riskScore", "type": "double", "default": 0.0,
+      "doc": "0.0 (low risk) - 1.0 (high risk), computed by the fraud scoring service" },
+    { "name": "processedTimestamp", "type": "long", "logicalType": "timestamp-millis" },
+    { "name": "failureReason", "type": ["null", "string"], "default": null,
+      "doc": "Populated only when status = DECLINED or FAILED. Added as a nullable field with a default so it is a BACKWARD-compatible addition." }
+  ]
+}

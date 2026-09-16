@@ -1,0 +1,26 @@
+{
+  "namespace": "com.publicissapient.paymentfraud.avro",
+  "type": "record",
+  "name": "PaymentInitiatedEvent",
+  "doc": "Emitted the instant a payment request is accepted by the ingestion API, before authorization/processing.",
+  "fields": [
+    { "name": "paymentId",     "type": "string", "doc": "UUID - idempotency key for downstream consumers" },
+    { "name": "userId",        "type": "string", "doc": "Kafka message key - guarantees per-user ordering" },
+    { "name": "merchantId",    "type": "string" },
+    { "name": "amount",        "type": "bytes",  "logicalType": "decimal", "precision": 18, "scale": 2,
+      "doc": "Monetary amount - NEVER use double/float for money" },
+    { "name": "currency",      "type": "string", "default": "USD" },
+    { "name": "paymentMethod", "type": {
+        "type": "enum", "name": "PaymentMethod",
+        "symbols": ["CARD", "ACH", "WIRE", "WALLET", "UPI"]
+      }
+    },
+    { "name": "initiatedTimestamp", "type": "long", "logicalType": "timestamp-millis" },
+    {
+      "name": "metadata",
+      "type": ["null", { "type": "map", "values": "string" }],
+      "default": null,
+      "doc": "Optional forward-compatible bag for extra attributes (device id, ip, geo, etc.) added FORWARD with a default of null so old consumers ignore it."
+    }
+  ]
+}
