@@ -2,7 +2,7 @@
 
 An end-to-end, production-grade reference project built with **Spring Boot 3.2**, **Apache Kafka**,
 **Kafka Streams**, and **Confluent Schema Registry (Avro)** — designed as hands-on interview prep
-for enterprise-level Spring/Kafka roles (e.g. Publicis Sapient Principal / Lead Engineer tracks).
+for enterprise-level Spring/Kafka roles (e.g.  Lead Engineer tracks).
 
 ---
 

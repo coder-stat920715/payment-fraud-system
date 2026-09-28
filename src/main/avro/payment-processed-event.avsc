@@ -1,5 +1,5 @@
 {
-  "namespace": "com.publicissapient.paymentfraud.avro",
+  "namespace": "com.souptik.paymentfraud.avro",
   "type": "record",
   "name": "PaymentProcessedEvent",
   "doc": "Emitted after the payment has gone through authorization/fraud-scoring. Consumed by ledger, notification, and analytics services.",

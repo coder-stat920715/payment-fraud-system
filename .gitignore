@@ -4,4 +4,4 @@ target/
 *.iml
 .vscode/
 .DS_Store
-src/main/java/com/publicissapient/paymentfraud/avro/
+src/main/java/com/souptik/paymentfraud/avro/

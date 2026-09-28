@@ -11,7 +11,7 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.publicissapient</groupId>
+    <groupId>com.souptik</groupId>
     <artifactId>payment-fraud-system</artifactId>
     <version>1.0.0</version>
     <name>payment-fraud-system</name>

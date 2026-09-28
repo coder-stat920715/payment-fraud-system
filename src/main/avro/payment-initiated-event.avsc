@@ -1,5 +1,5 @@
 {
-  "namespace": "com.publicissapient.paymentfraud.avro",
+  "namespace": "com.souptik.paymentfraud.avro",
   "type": "record",
   "name": "PaymentInitiatedEvent",
   "doc": "Emitted the instant a payment request is accepted by the ingestion API, before authorization/processing.",

@@ -50,7 +50,7 @@ spring:
         compression.type: snappy
         schema.registry.url: http://localhost:8081
         auto.register.schemas: false  # PRODUCTION: schemas are registered via CI/CD, not accidentally by a running app
-        partitioner.class: com.publicissapient.paymentfraud.producer.HighValueTransactionPartitioner
+        partitioner.class: com.souptik.paymentfraud.producer.HighValueTransactionPartitioner
 
     # ---------------------------------------------------------------------
     # CONSUMER
@@ -120,4 +120,4 @@ logging:
   level:
     org.apache.kafka: WARN
     org.springframework.kafka: INFO
-    com.publicissapient.paymentfraud: DEBUG
+    com.souptik.paymentfraud: DEBUG

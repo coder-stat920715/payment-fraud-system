@@ -1,5 +1,5 @@
 {
-  "namespace": "com.publicissapient.paymentfraud.avro",
+  "namespace": "com.souptik.paymentfraud.avro",
   "type": "record",
   "name": "HighRiskAlertEvent",
   "doc": "Produced by the Kafka Streams fraud-detection topology when a user's total spend exceeds the risk threshold within a 5-minute tumbling window.",
